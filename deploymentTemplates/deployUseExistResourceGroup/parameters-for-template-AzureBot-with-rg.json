@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "azureBotId": {
+      "value": "TestBot01132023"
+    },
+    "azureBotSku": {
+      "value": "S1"
+    },
+    "azureBotRegion": {
+      "value": "global"
+    },
+    "botEndpoint": {
+      "value": "https://MyBot01132023.azurewebsites.net/api/messages"
+    },
+    "appType": {
+      "value": "UserAssignedMSI"
+    },
+    "appId": {
+      "value": "308d8c7f-2eac-45ab-b782-f81579763dc1"
+    },
+    "UMSIName": {
+      "value": "BabylonBotIdentity"
+    },
+    "UMSIResourceGroupName": {
+      "value": "AI"
+    },
+    "tenantId": {
+      "value": "52a29461-fb2f-42bf-b1bf-dfc25f4f72d7"
+    }
+  }
+}
