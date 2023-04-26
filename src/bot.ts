@@ -4,90 +4,148 @@
 import { ActivityHandler, MessageFactory } from "botbuilder";
 import { DiscourseApi } from "./discourseApi/discourseApi";
 import { ResponseBuilder } from "./responseBuilder";
-import { discourseApiKey, discourseApiUser, openApiKey, openApiEndpoint } from "./userInfo";
+import {
+    discourseApiKey,
+    discourseApiUser,
+    openApiKey,
+    openApiEndpoint,
+} from "./userInfo";
 import { OpenApi } from "./openApi/openApi";
+import { AnswerRecorder } from "./answerRecorder";
 
 const discourseApi = new DiscourseApi(discourseApiKey, discourseApiUser);
 discourseApi.buildModsList().then(() => {});
 const openApi = new OpenApi(openApiKey, openApiEndpoint);
 
-const memory = {
-    lastAnswer: "",
-    lastTopicId: "",
-};
-
-let isEditing = false;
+enum BotStates {
+    Idling,
+    WaitingToPostAnswer,
+    WaitingForEdit,
+    WaitingForRating,
+}
 
 export class EchoBot extends ActivityHandler {
+    private currentState = BotStates.Idling;
+    private lastAnswer = "";
+    private lastTopicId = "";
+    private lastPostText = "";
+    private lastRating = 0;
+    private answerRecorder;
+
     constructor() {
         super();
+        console.log('EchoBot constructor');
+        this.answerRecorder = new AnswerRecorder("ratings.csv");
         // See https://aka.ms/about-bot-activity-message to learn more about the message and other activity types.
-        this.onMessage(async (context, next) => {
-            let replyText = `Echo: ${context.activity.text}`;
+        this.onMessage(this.messageListener.bind(this));
+        this.onMembersAdded(this.membersAddedListener.bind(this));
+    }
 
-            const text = context.activity.text.trim().toLowerCase();
-            try {
-                if (text === "latest questions") {
-                    const allTopics = await discourseApi.listLatestQuestions();
-                    const unmodedTopics =
-                        discourseApi.filterForUnmodedTopics(allTopics);
-                    const textList =
-                        ResponseBuilder.buildTopicListResponse(unmodedTopics);
-                    replyText = "The latest asked questions were:\n" + textList;
-                } else if (text.startsWith("codex answer")) {
-                    const topicUrl = text.replace("codex answer", "").trim();
-                    memory.lastTopicId = await discourseApi.getTopicId(topicUrl);
-                    const postText = await discourseApi.getFirstPostText(
-                        topicUrl
-                    );
-                    // Generate answer
-                    // replyText = `This is a auto generated answer for the text "${postText}"`;
-                    replyText = await openApi.getResponse(postText);
-                    memory.lastAnswer = replyText;
-                } else if (text === "edit answer") {
-                    if (!memory.lastAnswer) {
-                        replyText = "No answer to edit";
-                    } else {
-                        replyText = "Please post the edited answer.";
-                        isEditing = true;
-                    }
-                } else if (isEditing) {
-                    memory.lastAnswer = text;
-                    replyText = "Answer edited.";
-                    isEditing = false;
-                } else if (text === "post answer") {
-                    if (memory.lastAnswer === "") {
-                        replyText = "No answer to post";
-                    } else {
-                        const answerUrl = await discourseApi.post(
-                            memory.lastTopicId,
-                            memory.lastAnswer
-                        );
-                        replyText = "Answer posted to " + answerUrl;
-                    }
-                }
-            } catch (error) {
-                replyText = "Error: " + error;
-            }
-            await context.sendActivity(
-                MessageFactory.text(replyText, replyText)
-            );
-            // By calling next() you ensure that the next BotHandler is run.
-            await next();
-        });
+    public clearLastInfos() {
+        this.lastAnswer = "";
+        this.lastTopicId = "";
+        this.lastPostText = "";
+        this.lastRating = 0;
+    }
 
-        this.onMembersAdded(async (context, next) => {
-            const membersAdded = context.activity.membersAdded;
-            const welcomeText = "Hello and welcome!";
-            for (const member of membersAdded) {
-                if (member.id !== context.activity.recipient.id) {
-                    await context.sendActivity(
-                        MessageFactory.text(welcomeText, welcomeText)
-                    );
-                }
+    public onWaitingForEdit(text: string) {
+        this.lastAnswer = text;
+        this.currentState = BotStates.WaitingToPostAnswer;
+        return "Answer edited.";
+    }
+
+    public async onWaitingForRating(text: string) {
+        this.lastRating = parseInt(text);
+        this.currentState = BotStates.Idling;
+        this.answerRecorder.recordAnswer(this.lastTopicId, this.lastPostText, this.lastAnswer, this.lastRating);
+        return "Thank you for your rating.";
+    }
+
+    public async onWaitingToPostAnswer(text: string) {
+        if (text.startsWith("edit answer")) {
+            this.currentState = BotStates.WaitingForEdit;
+            return "Please post the edited answer.";
+        } else if (text.startsWith("post answer")) {
+            if (this.lastAnswer === "") {
+                this.currentState = BotStates.Idling;
+                return "No answer to post";
+            } else {
+                const answerUrl = await discourseApi.post(
+                    this.lastTopicId,
+                    this.lastAnswer
+                );
+                this.currentState = BotStates.WaitingForRating;
+                return `Answer posted to ${answerUrl}. Please rate this answer from 1 to 4.`;
             }
-            // By calling next() you ensure that the next BotHandler is run.
-            await next();
-        });
+        } else if (text.startsWith("cancel")) {
+            this.currentState = BotStates.WaitingForRating;
+            return "Answer canceled. Please rate this answer from 1 to 4.";
+        }
+    }
+
+    public async onIdling(text: string) {
+        if (text === "latest questions") {
+            const allTopics = await discourseApi.listLatestQuestions();
+            const unmodedTopics =
+                discourseApi.filterForUnmodedTopics(allTopics);
+            const textList =
+                ResponseBuilder.buildTopicListResponse(unmodedTopics);
+            return "The latest asked questions were:\n" + textList;
+        } else if (text.startsWith("codex answer")) {
+            const topicUrl = text.replace("codex answer", "").trim();
+            this.lastTopicId = await discourseApi.getTopicId(topicUrl);
+            const postText = await discourseApi.getFirstPostText(topicUrl);
+            this.lastPostText = postText;
+            // Generate answer
+            // const replyText = `This is a auto generated answer for the text "${postText}". Do you want to post it?`;
+            const answer = await openApi.getResponse(postText);
+            this.lastAnswer = answer;
+            this.currentState = BotStates.WaitingToPostAnswer;
+            return `The autogenerated answer for the question was:\n ${answer}. \nYou can edit it by typing "edit answer" or post it by typing "post answer" or cancel.`;
+        } else {
+            return "Echo: " + text + "\nType 'latest questions' to get the latest questions.";
+        }
+    }
+
+    public async messageListener(context, next) {
+        let replyText = `Echo: ${context.activity.text}`;
+
+        const text = context.activity.text.trim().toLowerCase();
+        console.log('Received text:', text, 'currentState:', this.currentState);
+        try {
+            switch (this.currentState) {
+                case BotStates.WaitingForEdit:
+                    replyText = this.onWaitingForEdit(text);
+                    break;
+                case BotStates.WaitingForRating:
+                    replyText = await this.onWaitingForRating(text);
+                    break;
+                case BotStates.WaitingToPostAnswer:
+                    replyText = await this.onWaitingToPostAnswer(text);
+                    break;
+                case BotStates.Idling:
+                    replyText = await this.onIdling(text);
+                    break;
+            }
+        } catch (error) {
+            replyText = "Error: " + error;
+        }
+        await context.sendActivity(MessageFactory.text(replyText, replyText));
+        // By calling next() you ensure that the next BotHandler is run.
+        await next();
+    }
+
+    public async membersAddedListener(context, next) {
+        const membersAdded = context.activity.membersAdded;
+        const welcomeText = "Hello and welcome!";
+        for (const member of membersAdded) {
+            if (member.id !== context.activity.recipient.id) {
+                await context.sendActivity(
+                    MessageFactory.text(welcomeText, welcomeText)
+                );
+            }
+        }
+        // By calling next() you ensure that the next BotHandler is run.
+        await next();
     }
 }

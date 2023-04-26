@@ -13,16 +13,25 @@ export class OpenApi {
         this._apiEndpoint = apiEndpoint;
     }
 
-    private _formatText(text: string) {
+    private _formatQuestionText(text: string) {
         const systemContext = `${imStart}system\n${promptContext}\n${imEnd}`;
         const userQuestion = `${imStart}user\n${text}\n${imEnd}`;
         const answer = `${imStart}sparky`;
 
         return [systemContext, userQuestion, answer].join("\n");
     }
+
+    private _formatAnswerText(text: string) {
+        let formattedText = text;
+        const endPos = text.indexOf(imEnd);
+        if (endPos > -1) {
+            formattedText = text.substring(0, endPos).trim();
+        }
+        return formattedText;
+    }
     
     public async getResponse(text: string) {
-        const formattedText = this._formatText(text);
+        const formattedText = this._formatQuestionText(text);
         console.log('formatted text:', formattedText);
         const options = {
             method: "POST",
@@ -40,8 +49,8 @@ export class OpenApi {
         };
         const result = await axios(options);
         if (result.data && result.data.choices && result.data.choices.length > 0) {
-            const formattedAnswer = result.data.choices[0].text.replace(imStart, "").replace(imEnd, "").trim();
-            return formattedAnswer;
+            console.log('unformatted answer', result.data.choices[0].text);
+            return this._formatAnswerText(result.data.choices[0].text);
         }
         return "No answer found";
     }
