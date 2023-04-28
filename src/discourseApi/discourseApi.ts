@@ -41,7 +41,7 @@ export class DiscourseApi {
         return result.data.id;
     }
 
-    private _topicHasModAttention(topic: any) {
+    private _modHasSeenTopic(topic: any) {
         const topicModIds = topic.posters.map((poster: any) => poster.user_id);
         const modIds = this._modIds;
         return topicModIds.some((topicModId) => modIds.includes(topicModId));
@@ -53,8 +53,8 @@ export class DiscourseApi {
     public async listLatestQuestions() {
         const options = {
             method: "GET",
-            // url: "https://forum.babylonjs.com/c/questions/5.json",
-            url: "https://forum.babylonjs.com/c/staff/4.json",
+            url: "https://forum.babylonjs.com/c/questions/5.json",
+            // url: "https://forum.babylonjs.com/c/staff/4.json",
             headers: {
                 "Api-Key": this._apiKey,
                 "Api-Username": this._apiUsername,
@@ -62,6 +62,7 @@ export class DiscourseApi {
         };
 
         const result = await axios(options);
+        console.log('result', result.data.topic_list.topics);
         const allTopics = result.data.topic_list.topics;
         return allTopics;
     }
@@ -77,6 +78,7 @@ export class DiscourseApi {
         };
 
         const result = await axios(options);
+        console.log('result', result.data.post_stream.posts);
         const firstPost = result.data.post_stream.posts[0];
 
         const topicOptions = {
@@ -89,7 +91,39 @@ export class DiscourseApi {
         };
 
         const post = await axios(topicOptions);
+        console.log('post data', post.data);
         return post.data.raw;
+    }
+
+    public async getAllPostsText(topicUrl: string) {
+        const options = {
+            method: "GET",
+            url: topicUrl + ".json",
+            headers: {
+                "Api-Key": this._apiKey,
+                "Api-Username": this._apiUsername,
+            },
+        };
+
+        const result = await axios(options);
+        const posts = result.data.post_stream.posts;
+        
+        const postTexts = await Promise.all(posts.map(async (post: any) => {
+            const topicOptions = {
+                method: "GET",
+                url: "https://forum.babylonjs.com/posts/" + post.id + ".json",
+                headers: {
+                    "Api-Key": this._apiKey,
+                    "Api-Username": this._apiUsername,
+                },
+            };
+
+            const postResult = await axios(topicOptions);
+            // console.log('got postresult', postResult.data);
+            return {text: postResult.data.raw, userId: postResult.data.user_id, username: postResult.data.username};
+        }));
+
+        return postTexts;
     }
 
     public async post(topicId: string, text: string) {
@@ -110,11 +144,14 @@ export class DiscourseApi {
         return `https://forum.babylonjs.com/t/${topicId}/${post.data.id}`;
     }
 
-    public filterForUnmodedTopics(topics: any[]) {
-        const unnacountedTopics = topics.filter(
-            // (topic) => !this._topicHasModAttention(topic)
-            (topic) => true
+    private _customTopicFilter(topic: any, onlyQuestionsUnseenByMods: boolean) {
+        return topic.title !== "About the Questions category" && (!onlyQuestionsUnseenByMods || !this._modHasSeenTopic(topic));
+    }
+
+    public filterTopics(topics: any[], onlyQuestionsUnseenByMods: boolean) {
+        const filteredTopics = topics.filter(
+            (topic) => this._customTopicFilter(topic, onlyQuestionsUnseenByMods)
         );
-        return unnacountedTopics;
+        return filteredTopics;
     }
 }
