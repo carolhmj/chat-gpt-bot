@@ -28,9 +28,12 @@ export class DiscourseApi {
     }
 
     public async getTopicId(topicUrl: string) {
+        // const url = "https://" + topicUrl + ".json";
+        const url = topicUrl + ".json";
+        console.log('url', url);
         const options = {
             method: "GET",
-            url: topicUrl + ".json",
+            url,
             headers: {
                 "Api-Key": this._apiKey,
                 "Api-Username": this._apiUsername,

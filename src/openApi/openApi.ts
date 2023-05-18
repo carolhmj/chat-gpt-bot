@@ -4,13 +4,14 @@ const imStart = "<|im_start|>";
 const imEnd = "<|im_end|>";
 const promptContext = `
     You are Sparky, a Computer Science Professor at a prestigous university and an expert in Babylon.js whose primary goal is to help 
-    teach Babylon to new Babylon creators, responding with guidance, help, and code snippets. 
-    You don't post links to external libraries. 
-    You don't post links starting with https://www.babylonjs-playground.com/
-    You don't post links starting with https://playground.babylonjs.com/. 
-    You post only valid links to the Babylon.js documentation.`;
+    teach Babylon to new Babylon creators, responding with guidance, help, and code snippets.
 
-const responseHeader = "Bleep bloop! 🤖 I'm Sparky, the ChatGPT bot! I'm here to help you with Babylon.js questions.\n\n"
+    You should **never** post links to external libraries. 
+    You should **never** generate URLs or links that are not referenced in the official Babylon.js documentation.`;
+
+const responseHeader = "Beep beep! 🤖 I'm Sparky, the ChatGPT bot! I'm here to help you with Babylon.js questions.\n\n"
+const responseFooter = "\n\nThis answer was generated with the help of AI 🤖 but checked and validated by the Babylon.js team.";
+
 export class OpenApi {
     private _apiKey: string;
     private _apiEndpoint: string;
@@ -43,12 +44,13 @@ export class OpenApi {
             clearedText = text.substring(0, endPos).trim();
         }
         // console.log('formatted text', clearedText);
-        const fullResponse = responseHeader + clearedText;
+        const fullResponse = responseHeader + clearedText + responseFooter;
         return fullResponse;
     }
     
     public async getResponse(textStream: {text: string, userId: string, username: string}[]) {
         const formattedText = this._formatQuestionText(textStream);
+        console.log('question formatted text', formattedText);
         const options = {
             method: "POST",
             url: this._apiEndpoint,
@@ -63,10 +65,37 @@ export class OpenApi {
                 "top_p": this._modelTopP,
             }
         };
-        const result = await axios(options);
-        if (result.data && result.data.choices && result.data.choices.length > 0) {
-            return this._formatAnswerText(result.data.choices[0].text);
+        const maxTries = 3;
+        let tryCount = 0;
+        const waitTime = 2000;
+        let result;
+        while (tryCount < maxTries) {
+            try {
+                result = await axios(options);
+                // console.log('result', result);
+                if (result.data && result.data.choices && result.data.choices.length > 0) {
+                    return this._formatAnswerText(result.data.choices[0].text);
+                } else {
+                    console.log('status', result.status);
+                    tryCount++;
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                }
+            } catch (e) {
+                tryCount++;
+                console.log('error', e.message);
+                // console.log('error', e);
+                // Wait a bit before trying to answer again
+                if (tryCount < maxTries) {
+                    await new Promise(resolve => setTimeout(resolve, waitTime*(tryCount+1)*(tryCount+1)));
+                }
+            }
         }
+        console.log('exceeded max tries');
+        // const result = await axios(options);
+        // console.log('result', result.data);
+        // if (result.data && result.data.choices && result.data.choices.length > 0) {
+        //     return this._formatAnswerText(result.data.choices[0].text);
+        // }
         return "No answer found";
     }
 
@@ -75,6 +104,7 @@ export class OpenApi {
             temperature: this._modelTemperature,
             topP: this._modelTopP,
             maxTokens: this._modelMaxTokens,
+            promptContext
         }
     }
 }
