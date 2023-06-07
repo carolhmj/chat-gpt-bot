@@ -1,23 +1,21 @@
 const axios = require("axios").default;
 
+const DEFAULT_TIMEOUT = 2 * 60 * 1000 // 2 min timeout?;
 const imStart = "<|im_start|>";
 const imEnd = "<|im_end|>";
 const promptContext = `
-    You are Sparky, a Computer Science Professor at a prestigous university and an expert in Babylon.js whose primary goal is to help 
-    teach Babylon to new Babylon creators, responding with guidance, help, and code snippets.
+    You are a bot on the Babylon.js forum which objective is to answer user questions. You are kind and helpful. 
 
+    When you are not certain of an answer, you can ask follow-up questions to the user.
     You should **never** post links to external libraries. 
     You should **never** generate URLs or links that are not referenced in the official Babylon.js documentation.`;
-
-const responseHeader = "Beep beep! 🤖 I'm Sparky, the ChatGPT bot! I'm here to help you with Babylon.js questions.\n\n"
-const responseFooter = "\n\nThis answer was generated with the help of AI 🤖 but checked and validated by the Babylon.js team.";
 
 export class OpenApi {
     private _apiKey: string;
     private _apiEndpoint: string;
-    private _modelTemperature = 0.2;
+    private _modelTemperature = 0.0;
     private _modelTopP = 0.1;
-    private _modelMaxTokens = 256;
+    private _modelMaxTokens = 512;
 
     constructor(apiKey: string, apiEndpoint: string) {
         this._apiKey = apiKey;
@@ -43,14 +41,11 @@ export class OpenApi {
         if (endPos > -1) {
             clearedText = text.substring(0, endPos).trim();
         }
-        // console.log('formatted text', clearedText);
-        const fullResponse = responseHeader + clearedText + responseFooter;
-        return fullResponse;
+        return clearedText;
     }
     
     public async getResponse(textStream: {text: string, userId: string, username: string}[]) {
         const formattedText = this._formatQuestionText(textStream);
-        console.log('question formatted text', formattedText);
         const options = {
             method: "POST",
             url: this._apiEndpoint,
@@ -63,7 +58,8 @@ export class OpenApi {
                 "max_tokens": this._modelMaxTokens,
                 "temperature": this._modelTemperature,
                 "top_p": this._modelTopP,
-            }
+            },
+            timeout: DEFAULT_TIMEOUT
         };
         const maxTries = 3;
         let tryCount = 0;
@@ -71,9 +67,11 @@ export class OpenApi {
         let result;
         while (tryCount < maxTries) {
             try {
+                console.log('try to call endpoint');
                 result = await axios(options);
-                // console.log('result', result);
+                // console.log('result', result.data);
                 if (result.data && result.data.choices && result.data.choices.length > 0) {
+                    console.log('success');
                     return this._formatAnswerText(result.data.choices[0].text);
                 } else {
                     console.log('status', result.status);
@@ -83,20 +81,14 @@ export class OpenApi {
             } catch (e) {
                 tryCount++;
                 console.log('error', e.message);
-                // console.log('error', e);
                 // Wait a bit before trying to answer again
                 if (tryCount < maxTries) {
                     await new Promise(resolve => setTimeout(resolve, waitTime*(tryCount+1)*(tryCount+1)));
                 }
             }
         }
-        console.log('exceeded max tries');
-        // const result = await axios(options);
-        // console.log('result', result.data);
-        // if (result.data && result.data.choices && result.data.choices.length > 0) {
-        //     return this._formatAnswerText(result.data.choices[0].text);
-        // }
-        return "No answer found";
+        console.error('exceeded max tries');
+        return "";
     }
 
     public getModelParameters() {

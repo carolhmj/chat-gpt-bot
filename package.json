@@ -14,7 +14,7 @@
     "postinstall": "node ./deploymentScripts/webConfigPrep.js",
     "start": "node ./lib/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "watch": "nodemon ./src/index.ts"
+    "watch": "tsc-watch --noClear -p ./tsconfig.json --onSuccess \"node ./lib/index.js\""
   },
   "repository": {
     "type": "git",
@@ -31,8 +31,8 @@
   },
   "devDependencies": {
     "@types/restify": "8.4.2",
-    "nodemon": "^2.0.4",
     "ts-node": "^10.9.1",
+    "tsc-watch": "^6.0.4",
     "tslint": "^6.1.2"
   }
 }
