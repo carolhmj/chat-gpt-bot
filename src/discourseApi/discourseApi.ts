@@ -1,5 +1,7 @@
 const axios = require("axios").default;
 
+const responseFooter = (username) => `This answer was generated with the help of AI 🤖 but checked and validated by @${username}`;
+
 /**
  * This class is responsible for communicating with the Discourse API.
  */
@@ -28,9 +30,12 @@ export class DiscourseApi {
     }
 
     public async getTopicId(topicUrl: string) {
+        // const url = "https://" + topicUrl + ".json";
+        const url = topicUrl + ".json";
+        console.log('url', url);
         const options = {
             method: "GET",
-            url: topicUrl + ".json",
+            url,
             headers: {
                 "Api-Key": this._apiKey,
                 "Api-Username": this._apiUsername,
@@ -126,7 +131,9 @@ export class DiscourseApi {
         return postTexts;
     }
 
-    public async post(topicId: string, text: string) {
+    public async post(topicId: string, answerText: string, username: string) {
+        const fullText = answerText + "\n\n" + responseFooter(username);
+
         const options = {
             method: "POST",
             url: "https://forum.babylonjs.com/posts.json",
@@ -135,7 +142,8 @@ export class DiscourseApi {
                 "Api-Username": this._apiUsername,
             },
             data: {
-                raw: text,
+                // raw: answerText,
+                raw: fullText,
                 ["topic_id"]: topicId,
             }
         }

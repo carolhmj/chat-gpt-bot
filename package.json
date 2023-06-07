@@ -6,15 +6,15 @@
   "license": "MIT",
   "main": "./lib/index.js",
   "engines": {
-    "node": "v16.17.0"
+    "node": "v16.16.0"
   },
   "scripts": {
     "build": "tsc --build",
     "lint": "tslint -c tslint.json 'src/**/*.ts'",
-    "postinstall": "npm run build && node ./deploymentScripts/webConfigPrep.js",
-    "start": "tsc --build && node ./lib/index.js",
+    "postinstall": "node ./deploymentScripts/webConfigPrep.js",
+    "start": "node ./lib/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "watch": "nodemon --watch ./src -e ts --exec \"npm run start\""
+    "watch": "tsc-watch --noClear -p ./tsconfig.json --onSuccess \"node ./lib/index.js\""
   },
   "repository": {
     "type": "git",
@@ -26,12 +26,13 @@
     "dotenv": "~8.2.0",
     "openapi": "^1.0.1",
     "replace": "~1.2.0",
-    "restify": "~8.5.1"
+    "restify": "~8.5.1",
+    "typescript": "^4.0.7"
   },
   "devDependencies": {
     "@types/restify": "8.4.2",
-    "nodemon": "^2.0.4",
-    "tslint": "^6.1.2",
-    "typescript": "^4.0.7"
+    "ts-node": "^10.9.1",
+    "tsc-watch": "^6.0.4",
+    "tslint": "^6.1.2"
   }
 }
